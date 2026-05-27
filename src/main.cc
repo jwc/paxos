@@ -1,46 +1,34 @@
 #include "header.hh"
 
-int main(int argc, char **argv) {
-  if (argc != 5) {
-    printf("TODO: Add msg\n");
-    exit(1);
-  }
-  printf("argc:%d\n", argc);
+class OtherTask : Task {
+private:
+  OtherTask() : Task(Type::BLOCKING, 250) { ready(); }
 
-  //Buffer<Message> * incoming = new Buffer<Message>();
-  //Buffer<Message> * outgoing = new Buffer<Message>();
+  void executeTask() override {
+    printf("Ran OtherTask\n");
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    OtherTask::create();
+  } 
 
-  //Networking * net = new Localhost(argv[1]);
-  Networking * net = new Lan(argv[1]);
-  net->addNode(argv[2]);
-  net->addNode(argv[3]);
-  net->addNode(argv[4]);
-   
-  fprintf(stderr, "net N: %d\n", net->getN());
-  //sleep(1);
-  //Paxos * pax = new Paxos(net->getN(), net->getID(), incoming, outgoing);
-  //Paxos * pax = new Paxos(1, net->getID(), *net, net->getBuffer());
-  Paxos * pax = new Paxos(*net);
+public:
+  static void create() { new OtherTask(); }
+};
 
-  //sleep(5);
-  Value v;
-  srand((unsigned long int) &v);
+int main() {
+  //Task::create(150000000);
+  //Task::create(500);
+  //Task::create(1500);
+  printf("Created\n");
+  OtherTask::create();
 
-  while (1) {
-    sleep(1);
-    v.type = rand() % 255;
-    v.data = rand() % 255;
-    pax->makeRequest(v);
-  }
-  /*
-  sleep(5);
-  net->printSocks();
-  //char str[MSG_SIZE] = "HI";
-  //net->send(1, str);
-  sleep(5);
-  net->printSocks();
-  */
+  //for (int i = 0; i < 5; i++) { OtherTask::create(); }
+  //for (int i = 0; i < 5; i++) Task::create();
+  
+  std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+  printf("main ending\n");
+  Task::end();
+
+  printf("main returning\n");
   return 0;
 }
-
 

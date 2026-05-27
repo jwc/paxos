@@ -1,20 +1,13 @@
 #ifndef TASK_HH
 #define TASK_HH
 
-#include <deque>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-
-#include <stdio.h>
-#include <chrono>
-#include <queue>
-
 class Task {
 public:
   enum Type { BLOCKING, NON_BLOCKING };
 
   virtual void ready() final;
+
+  virtual void registerCleanupTask() final;
 
   static void end(); 
 
@@ -28,6 +21,7 @@ protected:
 private:
   enum Type type;
   int delay;
+  bool enqueued = false;
 
   friend class TimerTask;
 
@@ -38,6 +32,8 @@ private:
     void enqueue(Task *task);
     
     void enqueue(Task *task, int delay);
+
+    void enqueueCleanup(Task *task);
 
     void updateWaitingTasks();
 
@@ -63,6 +59,9 @@ private:
 
     min_heap                waitingTasks;
     std::mutex              waitingLock;
+
+    std::mutex              cleanupLock;
+    std::deque<Task*>       cleanupTasks;
 
     void worker(Type type);
   } taskManager;

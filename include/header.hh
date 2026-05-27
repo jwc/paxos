@@ -1,6 +1,15 @@
 #ifndef HEADER_HH
 #define HEADER_HH
 
+#include <deque>
+#include <condition_variable>
+#include <queue>
+//#include <utility>
+
+#include <string>
+#include <unordered_map>
+#include <iostream>
+
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -25,6 +34,7 @@
 #include <ncurses.h>
 #include <locale.h>
 
+
 #define NET_MAX_CONNECTIONS 4
 #define NET_BROADCAST -1
 #define NET_PORT 9999
@@ -37,16 +47,22 @@
 
 #define FLBUFFER_SIZE 50 
 
-#endif // HEADER_HH
+//#endif // HEADER_HH
 
 
+#include "task.hh"
+
+//#include "networking.hh"
+#include "ipv4.hh"
+
+
+/*
 #include "message.hh"
 
 #include "buffer.hh"
 #include "svbuffer.hh"
 #include "flbuffer.hh"
 
-#include "networking.hh"
 #include "ipv4.hh"
 #include "localhost.hh"
 #include "lan.hh"
@@ -57,4 +73,7 @@
 #include "printable.hh"
 #include "cards.hh"
 #include "hearts.hh"
+*/
+
+#endif // HEADER_HH
 
