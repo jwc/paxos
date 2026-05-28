@@ -133,8 +133,10 @@ void Task::TaskManager::end() {
   blockingCV.notify_all();
 
   while ( ! cleanupTasks.empty()) {
-    cleanupTasks.front()->executeTask();
+    Task * task = cleanupTasks.front();
     cleanupTasks.pop_front();
+    task->executeTask();
+    delete task;
   }
 
   while ( ! nonblockingThreadPool.empty()) {
