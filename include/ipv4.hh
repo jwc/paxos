@@ -7,6 +7,11 @@ public:
 private: 
 };
 
+class Application {
+public:
+  virtual void processMessage(int, char*) = 0;
+};
+
 /**
  * A network object for connecting with other nodes via IPv4. 
  */
@@ -19,6 +24,8 @@ public:
   void addNode(std::string name, std::string address);
 
   void sendMessage(std::string name, int length, char *message);
+
+  void registerApp(Application *app) { this->app = app; }
 
 protected:
 
@@ -34,6 +41,7 @@ private:
   std::unordered_map<int, struct sockaddr_in> idToAddr;
   std::unordered_map<int, int> idToSock;
   std::set<int> openSockets;
+  Application *app = nullptr;
   
   friend class ReceiverTask;
   friend class ListenerTask;
@@ -86,11 +94,17 @@ public:
           id = net->nameToId[name] = net->nameToId.size();
           net->idToSock[id] = socket;
         }
-      }
+        
+        delete[] message;
 
-      // Do something w/ the message
-      std::cout << "RECV:'" << message << "'\n";
-      delete[] message;
+      } else {
+        // Do something w/ the message
+        std::cout << "RECV:'" << message << "'\n";
+
+        if (net->app != nullptr) net->app->processMessage(msgSize, message);
+
+        delete[] message;
+      }
     }
 
     {
@@ -147,8 +161,8 @@ class EndNetTask: IPv4Task {
 public:
   EndNetTask(IPv4 *net) : IPv4Task(net, 0) { registerCleanupTask(); }
   void executeTask() override {
-    std::cout << "END NET\n";
     std::lock_guard<std::mutex> lock(net->mtx);
+    std::cout << "END NET:" << net->openSockets.size() << "\n";
 
     for (int sock : net->openSockets) {
       shutdown(sock, SHUT_RD);
