@@ -33,20 +33,29 @@ void Paxos::processMessage(int length, char *message) {
     return;
   }
 
-  Message *msg = new Message();
-
-  int32_t *ptr = (int32_t *) message;
-  Message::Type type = (Message::Type) ptr[0];
-  printf("test:%d ex:%d sizeof():%ld\n", (int) type, Message::Type::ACCEPT, sizeof(Message::Type));
-
-  if (sscanf(message, "%d %d %d", (int*) &msg->type, &msg->to, &msg->from) != 3) {
-    delete msg;
-    std::cerr << "ERROR: bad sscanf()\n";
+  if (length < Message::messageSize) {
+    std::cerr << "ERROR: Message Too Short!\n";
     return;
   }
 
-  printf("MSG: type:%d to:%d from:%d\n", msg->type, msg->to, msg->from);
-  delete msg;
-
+  Message m = Message(message);
+  switch (m.getType()) {
+    case PREPARE:
+      {
+        PrepareMsg prep = PrepareMsg(message);
+        prep.print();
+        break;
+      }
+    case PROMISE:
+    case ACCEPT:
+    case ACCEPTED:
+    case HEARTBEAT:
+    case REQUEST:
+      m.print();
+      break;
+    default:
+      std::cerr << "ERROR: Invalid Message Type Recieved!\n";
+      m.print();
+  }
 }
 
