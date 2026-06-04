@@ -22,9 +22,11 @@ void Paxos::finalizeServers() {
   for (int i = 0; i < numServers; i++) {
     if (servers[i] == name) {
       id = i; 
-      return;
+      break;
     }
   }
+
+  myBallot = id + numServers;
 }
 
 void Paxos::processMessage(int length, char *message) {
@@ -47,6 +49,15 @@ void Paxos::processMessage(int length, char *message) {
         break;
       }
     case PROMISE:
+      {
+        if (length < PromiseMsg::messageSize) {
+          std::cerr << "ERROR: Prom. Msg. Too Short!\n";
+          return;
+        }
+        PromiseMsg prom = PromiseMsg(message);
+        prom.print();
+        break;
+      }
     case ACCEPT:
     case ACCEPTED:
     case HEARTBEAT:
