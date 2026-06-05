@@ -93,6 +93,11 @@ void IPv4::sendMessage(std::string name, int length, char *message) {
 
   int id = nameToId[name];
 
+  if (id == 0) {
+    app->processMessage(length, message);
+    return;
+  }
+
   sendMessage(id, length, message);
 }
 
