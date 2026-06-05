@@ -195,6 +195,8 @@ public:
 
   void processMessage(int length, char *message);
 
+  void handlePrepare(PrepareMsg &prep);
+
 };
 
 #endif // PAXOS_HH

@@ -32,10 +32,10 @@ int main() {
   //std::this_thread::sleep_for(std::chrono::milliseconds(500));
   //char c1[] = "1 2 3\0004 5 6\0007 8 9";
   char c2[Paxos::PromiseMsg::messageSize] = {0};
-  Paxos::Message m1 = Paxos::Message(c2, Paxos::Type::PROMISE, 1, 2, 7);
-  Paxos::PromiseMsg m2 = Paxos::PromiseMsg(c2, 1, 3, 7, 11, 13);
+  Paxos::Message m1 = Paxos::Message(c2, Paxos::Type::PREPARE, 1, 2, 7);
+  //Paxos::PromiseMsg m2 = Paxos::PromiseMsg(c2, 1, 3, 7, 11, 13);
   m1.getType();
-  m2.getType();
+  //m2.getType();
   net1.sendMessage("node2", Paxos::PromiseMsg::messageSize, c2);
   //std::this_thread::sleep_for(std::chrono::milliseconds(500));
   //net2.sendMessage("node1", strlen(m1), m1);
@@ -43,7 +43,7 @@ int main() {
   //for (int i = 0; i < 5; i++) { OtherTask::create(); }
   //for (int i = 0; i < 5; i++) Task::create();
   
-  std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+  std::this_thread::sleep_for(std::chrono::milliseconds(8000));
   printf("main ending\n");
   Task::end();
 
