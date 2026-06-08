@@ -23,25 +23,32 @@ class Log {
   node_t & maxVotes;
   std::unordered_map<slot_t, Value> values;
   std::unordered_map<slot_t, Vote> votes;
+  std::unordered_map<slot_t, ballot_t> ballots;
   slot_t pendingStart = 0;
   slot_t pendingEnd = 0;
-
-public:
-  const static int maxPending = 4;
-  Log(node_t &maxVotes) : maxVotes(maxVotes) {}
-
-  slot_t getPendingStart() { return pendingStart; }
-  slot_t getPendingEnd() { return pendingEnd; }
-
-  Value getValue(slot_t slot) { return values[slot]; }
-
-  Vote getVote(slot_t slot) { return votes[slot]; }
 
   void setValue(slot_t slot, Value value) 
   { if (isWritable(slot)) values[slot] = value; }
 
   void setVote(slot_t slot, Vote vote) 
   { if (isWritable(slot)) votes[slot] = vote; }
+
+  void setBallot(slot_t slot, ballot_t ballot) 
+  { if (isWritable(slot)) ballots[slot] = ballot; } 
+
+public:
+  const static int maxPending = 4;
+  Log(node_t &maxVotes) : maxVotes(maxVotes) {}
+
+  slot_t getPendingStart() { return pendingStart; }
+
+  slot_t getPendingEnd() { return pendingEnd; }
+
+  Value getValue(slot_t slot) { return values[slot]; }
+
+  Vote getVote(slot_t slot) { return votes[slot]; }
+
+  ballot_t getBallot(slot_t slot) { return ballots[slot]; }
 
   bool isPending(slot_t slot) 
   { return isFilled(slot) && ! votes[slot].hasMajorityOf(maxVotes); }
@@ -54,6 +61,18 @@ public:
 
   bool isWritable(slot_t slot) 
   { return slot >= pendingStart && slot < pendingStart + maxPending; }
+
+  void insert(slot_t slot, Value value, Vote vote, ballot_t ballot) {
+    if ( ! isWritable(slot)) return;
+
+    if (isFilled(slot) && ballot < ballots[slot]) return;
+
+    values[slot] = value;
+    votes[slot] = vote;
+    ballots[slot] = ballot;
+
+    return;
+  }
 };
 
 class Paxos : Application {
@@ -67,6 +86,9 @@ class Paxos : Application {
   ballot_t                  myBallot = 0;
   Vote                      leaderVote;
   Log                       log{numServers};
+
+  bool isLeader() 
+  { return latestBallot == myBallot && leaderVote.hasMajorityOf(numServers); }
 
   const static int          maxPendingValues = Log::maxPending;
 public:
@@ -196,6 +218,8 @@ public:
   void processMessage(int length, char *message);
 
   void handlePrepare(PrepareMsg &prep);
+  
+  void handlePromise(PromiseMsg &prom);
 
 };
 

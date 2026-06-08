@@ -57,6 +57,7 @@ void Paxos::processMessage(int length, char *message) {
         }
         PromiseMsg prom = PromiseMsg(message);
         prom.print();
+        handlePromise(prom);
         break;
       }
     case ACCEPT:
@@ -99,3 +100,17 @@ void Paxos::handlePrepare(Paxos::PrepareMsg &prep) {
     }
   }
 }
+
+void Paxos::handlePromise(Paxos::PromiseMsg &prom) {
+  printf("count:%d leader:%d\n", leaderVote.count(), isLeader());
+  
+  if (isLeader() || prom.getBallot() != myBallot) return;
+
+  leaderVote.cast(prom.getFrom());
+
+  slot_t slot;
+  for (slot = prom.getPromisedStart(); slot < prom.getPromisedEnd(); slot++) {
+    log.insert(slot, prom.getValue(slot), prom.getVote(slot), prom.getBallot());
+  }
+}
+
