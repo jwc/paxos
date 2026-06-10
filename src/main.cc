@@ -41,10 +41,10 @@ int main() {
   //net2.addNode("node1", "127.0.0.1:8989");
   //std::this_thread::sleep_for(std::chrono::milliseconds(500));
   //char c1[] = "1 2 3\0004 5 6\0007 8 9";
-  char c2[Paxos::PromiseMsg::messageSize] = {0};
-  Paxos::Message m1 = Paxos::Message(c2, Paxos::Type::PREPARE, 1, 2, 7);
+  //char c2[Paxos::PromiseMsg::messageSize] = {0};
+  //Paxos::Message m1 = Paxos::Message(c2, Paxos::Type::PREPARE, 1, 2, 7);
   //Paxos::PromiseMsg m2 = Paxos::PromiseMsg(c2, 1, 3, 7, 11, 13);
-  m1.getType();
+  //m1.getType();
   //m2.getType();
   //net1.sendMessage("node2", Paxos::PromiseMsg::messageSize, c2);
   //std::this_thread::sleep_for(std::chrono::milliseconds(500));

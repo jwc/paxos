@@ -20,6 +20,7 @@ typedef struct vote_t {
 static_assert(sizeof(Vote) == sizeof(uint32_t));
 
 class Log {
+private:
   node_t & maxVotes;
   std::unordered_map<slot_t, Value> values;
   std::unordered_map<slot_t, Vote> votes;
@@ -28,89 +29,49 @@ class Log {
   slot_t pendingEnd = 0;
   slot_t freeSlot = 0;
 
-  /*
-  void setValue(slot_t slot, Value value) 
-  { if (isWritable(slot)) values[slot] = value; }
-
-  void setVote(slot_t slot, Vote vote) 
-  { if (isWritable(slot)) votes[slot] = vote; }
-
-  void setBallot(slot_t slot, ballot_t ballot) 
-  { if (isWritable(slot)) ballots[slot] = ballot; } 
-  */
-
 public:
   const static int MAX_PENDING = 4;
+
   Log(node_t &maxVotes) : maxVotes(maxVotes) {}
 
-  slot_t getPendingStart() { return pendingStart; }
+  slot_t getPendingStart();
 
-  slot_t getPendingEnd() { return pendingEnd; }
+  slot_t getPendingEnd();
 
-  Value getValue(slot_t slot) { return values[slot]; }
+  Value getValue(slot_t slot);
 
-  Vote getVote(slot_t slot) { return votes[slot]; }
+  Vote getVote(slot_t slot);
 
-  ballot_t getBallot(slot_t slot) { return ballots[slot]; }
+  ballot_t getBallot(slot_t slot);
 
-  bool isPending(slot_t slot) 
-  { return isFilled(slot) && ! votes[slot].hasMajorityOf(maxVotes); }
+  bool isPending(slot_t slot);
 
-  bool isConfirmed(slot_t slot) 
-  { return isFilled(slot) && votes[slot].hasMajorityOf(maxVotes); }
+  bool isConfirmed(slot_t slot);
 
-  bool isFilled(slot_t slot) 
-  { return values.contains(slot) && votes.contains(slot); }
+  bool isFilled(slot_t slot);
 
-  bool isWritable(slot_t slot) 
-  { return slot >= pendingStart && slot < pendingStart + MAX_PENDING; }
+  bool isWritable(slot_t slot);
 
-  bool insert(slot_t slot, Value value, Vote vote, ballot_t ballot) {
-    if ( ! isWritable(slot)) return false;
+  bool insert(slot_t slot, Value value, Vote vote, ballot_t ballot);
 
-    if (isFilled(slot) && ballot < ballots[slot]) return false;
+  bool insert(slot_t slot, Value value, ballot_t ballot);
 
-    if (values[slot] == value && ballots[slot] == ballot) {
-      votes[slot].votes |= vote.votes; 
+  slot_t getEmptySlot();
 
-    } else {
-      values[slot] = value;
-      votes[slot] = vote;
-      ballots[slot] = ballot;
-    }
-    printf("INSERT(): slot:%d value:%d vote:%d\n", slot, value, votes[slot].votes);
-
-    if (pendingEnd < slot) pendingEnd = slot;
-    
-    while (isConfirmed(pendingStart)) {
-      printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
-      pendingStart++;
-    }
-
-    return true;
-  }
-
-  bool insert(slot_t slot, Value value, ballot_t ballot) 
-  {return insert(slot, value, Vote(), ballot); }
-
-  slot_t getEmptySlot() {
-    while (isFilled(freeSlot)) freeSlot++;
-
-    return freeSlot;
-  }
-
-  void castVote(slot_t slot, node_t voter) { 
-    if (isFilled(slot) && isWritable(slot)) votes[slot].cast(voter); 
-
-    while (isConfirmed(pendingStart)) {
-      printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
-      pendingStart++;
-    }
-  }
+  void castVote(slot_t slot, node_t voter);
 };
 
 class Paxos : Application {
-//private:
+public:
+  Paxos(std::string name, std::string address); 
+
+  void addServer(std::string name, std::string address);
+
+  void finalizeServers();
+
+  void requestValue(Value value);
+
+private:
   IPv4                      net;
   std::vector<std::string>  servers;
   node_t                    numServers  = 0;
@@ -122,12 +83,8 @@ class Paxos : Application {
   Log                       log{numServers};
   int                       intervalsWithoutLeader = 0;
   const static int          MAX_INTERVALS_WO_LEADER = 3;
-
-  bool isLeader() 
-  { return latestBallot == myBallot && leaderVote.hasMajorityOf(numServers); }
-
   const static int          maxPendingValues = Log::MAX_PENDING;
-public:
+
   enum Type : uint8_t { 
     PREPARE = 1, 
     PROMISE = 2,
@@ -364,13 +321,6 @@ public:
     }
   };
 
-public:
-  Paxos(std::string name, std::string address); 
-
-  void addServer(std::string name, std::string address);
-
-  void finalizeServers();
-
   void processMessage(int length, char *message);
 
   void handlePrepare(PrepareMsg &prep);
@@ -383,7 +333,7 @@ public:
 
   void handleHeartbeat(HeartbeatMsg &heartbeat);
 
-  void requestValue(Value value);
+  bool isLeader();
 };
 
 #endif // PAXOS_HH

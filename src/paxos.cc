@@ -1,5 +1,79 @@
 #include "header.hh"
 
+// Log:
+
+slot_t Log::getPendingStart() { return pendingStart; }
+
+slot_t Log::getPendingEnd() { return pendingEnd; }
+
+Value Log::getValue(slot_t slot) { return values[slot]; }
+
+Vote Log::getVote(slot_t slot) { return votes[slot]; }
+
+ballot_t Log::getBallot(slot_t slot) { return ballots[slot]; }
+
+bool Log::isPending(slot_t slot) 
+{ return isFilled(slot) && ! votes[slot].hasMajorityOf(maxVotes); }
+
+bool Log::isConfirmed(slot_t slot) 
+{ return isFilled(slot) && votes[slot].hasMajorityOf(maxVotes); }
+
+bool Log::isFilled(slot_t slot) 
+{ return values.contains(slot) && votes.contains(slot); }
+
+bool Log::isWritable(slot_t slot) 
+{ return slot >= pendingStart && slot < pendingStart + MAX_PENDING; }
+
+bool Log::insert(slot_t slot, Value value, Vote vote, ballot_t ballot) {
+  if ( ! isWritable(slot)) return false;
+
+  if (isFilled(slot) && ballot < ballots[slot]) return false;
+
+  if (values[slot] == value && ballots[slot] == ballot) {
+    votes[slot].votes |= vote.votes; 
+
+  } else {
+    values[slot] = value;
+    votes[slot] = vote;
+    ballots[slot] = ballot;
+  }
+  printf("INSERT(): slot:%d value:%d vote:%d\n", slot, value, votes[slot].votes);
+
+  if (pendingEnd < slot) pendingEnd = slot;
+    
+  while (isConfirmed(pendingStart)) {
+    printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
+    pendingStart++;
+  }
+
+  return true;
+}
+
+bool Log::insert(slot_t slot, Value value, ballot_t ballot) 
+{ return insert(slot, value, Vote(), ballot); }
+
+slot_t Log::getEmptySlot() {
+  while (isFilled(freeSlot)) freeSlot++;
+
+  return freeSlot;
+}
+
+void Log::castVote(slot_t slot, node_t voter) { 
+  if (isFilled(slot) && isWritable(slot)) votes[slot].cast(voter); 
+
+  while (isConfirmed(pendingStart)) {
+    printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
+    pendingStart++;
+  }
+}
+
+
+
+
+
+
+// Paxos Public:
+
 Paxos::Paxos(std::string name, std::string address) : net(name, address) {
   servers.push_back(name);
   net.registerApp(this);
@@ -36,6 +110,29 @@ void Paxos::finalizeServers() {
   printf("new PaxosTask\n:");
   new PaxosTask(this);
 }
+
+void Paxos::requestValue(Value value) {
+  if ( ! isLeader()) return;
+
+  slot_t slot = log.getEmptySlot();
+  if ( ! log.insert(slot, value, latestBallot)) {
+    return;
+  }
+
+  log.castVote(slot, id);
+
+  assert(latestBallot % numServers == id);
+  char rawMessage[Paxos::AcceptMsg::messageSize] = {0};
+  Paxos::AcceptMsg accept = Paxos::AcceptMsg(rawMessage,
+                                             0, id, latestBallot, slot, value);
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    accept.setTo(i);
+    net.sendMessage(servers[i], Paxos::AcceptMsg::messageSize, rawMessage);
+  }
+}
+
+// Paxos Private:
 
 void Paxos::processMessage(int length, char *message) {
   //std::cout << "processMessage()\n";
@@ -197,24 +294,6 @@ void Paxos::handleHeartbeat(Paxos::HeartbeatMsg &heartbeat) {
   } 
 }
 
-void Paxos::requestValue(Value value) {
-  if ( ! isLeader()) return;
-
-  slot_t slot = log.getEmptySlot();
-  if ( ! log.insert(slot, value, latestBallot)) {
-    return;
-  }
-
-  log.castVote(slot, id);
-
-  assert(latestBallot % numServers == id);
-  char rawMessage[Paxos::AcceptMsg::messageSize] = {0};
-  Paxos::AcceptMsg accept = Paxos::AcceptMsg(rawMessage,
-                                             0, id, latestBallot, slot, value);
-  for (node_t i = 0; i < numServers; i++) {
-    if (i == id) continue;
-    accept.setTo(i);
-    net.sendMessage(servers[i], Paxos::AcceptMsg::messageSize, rawMessage);
-  }
-}
+bool Paxos::isLeader() 
+{ return latestBallot == myBallot && leaderVote.hasMajorityOf(numServers); }
 
