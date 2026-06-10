@@ -26,7 +26,9 @@ class Log {
   std::unordered_map<slot_t, ballot_t> ballots;
   slot_t pendingStart = 0;
   slot_t pendingEnd = 0;
+  slot_t freeSlot = 0;
 
+  /*
   void setValue(slot_t slot, Value value) 
   { if (isWritable(slot)) values[slot] = value; }
 
@@ -35,9 +37,10 @@ class Log {
 
   void setBallot(slot_t slot, ballot_t ballot) 
   { if (isWritable(slot)) ballots[slot] = ballot; } 
+  */
 
 public:
-  const static int maxPending = 4;
+  const static int MAX_PENDING = 4;
   Log(node_t &maxVotes) : maxVotes(maxVotes) {}
 
   slot_t getPendingStart() { return pendingStart; }
@@ -60,18 +63,49 @@ public:
   { return values.contains(slot) && votes.contains(slot); }
 
   bool isWritable(slot_t slot) 
-  { return slot >= pendingStart && slot < pendingStart + maxPending; }
+  { return slot >= pendingStart && slot < pendingStart + MAX_PENDING; }
 
-  void insert(slot_t slot, Value value, Vote vote, ballot_t ballot) {
-    if ( ! isWritable(slot)) return;
+  bool insert(slot_t slot, Value value, Vote vote, ballot_t ballot) {
+    if ( ! isWritable(slot)) return false;
 
-    if (isFilled(slot) && ballot < ballots[slot]) return;
+    if (isFilled(slot) && ballot < ballots[slot]) return false;
 
-    values[slot] = value;
-    votes[slot] = vote;
-    ballots[slot] = ballot;
+    if (values[slot] == value && ballots[slot] == ballot) {
+      votes[slot].votes |= vote.votes; 
 
-    return;
+    } else {
+      values[slot] = value;
+      votes[slot] = vote;
+      ballots[slot] = ballot;
+    }
+    printf("INSERT(): slot:%d value:%d vote:%d\n", slot, value, votes[slot].votes);
+
+    if (pendingEnd < slot) pendingEnd = slot;
+    
+    while (isConfirmed(pendingStart)) {
+      printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
+      pendingStart++;
+    }
+
+    return true;
+  }
+
+  bool insert(slot_t slot, Value value, ballot_t ballot) 
+  {return insert(slot, value, Vote(), ballot); }
+
+  slot_t getEmptySlot() {
+    while (isFilled(freeSlot)) freeSlot++;
+
+    return freeSlot;
+  }
+
+  void castVote(slot_t slot, node_t voter) { 
+    if (isFilled(slot) && isWritable(slot)) votes[slot].cast(voter); 
+
+    while (isConfirmed(pendingStart)) {
+      printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
+      pendingStart++;
+    }
   }
 };
 
@@ -92,7 +126,7 @@ class Paxos : Application {
   bool isLeader() 
   { return latestBallot == myBallot && leaderVote.hasMajorityOf(numServers); }
 
-  const static int          maxPendingValues = Log::maxPending;
+  const static int          maxPendingValues = Log::MAX_PENDING;
 public:
   enum Type : uint8_t { 
     PREPARE = 1, 
@@ -210,6 +244,64 @@ public:
     }
   };
 
+  class AcceptMsg : public Message {
+    static const int slotOffset = Message::messageSize;
+    static const int valueOffset = slotOffset + sizeof(slot_t); 
+  public:
+    static const int messageSize = valueOffset + sizeof(Value);
+
+    AcceptMsg(char * data) : Message(data) {}
+    AcceptMsg(char * data, 
+              node_t to, 
+              node_t from, 
+              ballot_t ballot, 
+              slot_t slot, 
+              Value value) 
+        : Message(data, Type::ACCEPT, to, from, ballot) {
+      setSlot(slot);
+      setValue(value);
+    }
+
+    slot_t getSlot() { return *((slot_t *) (data + slotOffset)); }
+    void setSlot(slot_t slot) { *((slot_t *) (data + slotOffset)) = slot; }
+    Value getValue() { return *((Value *) (data + valueOffset)); }
+    void setValue(Value value) { *((Value *) (data + valueOffset)) = value; }
+  
+    void print() {
+      printf("ACPT{to:%d from:%d bal:%d slot:%d val:%d}\n", getTo(), getFrom(), 
+          getBallot(), getSlot(), getValue());
+    }
+  };
+
+  class AcceptedMsg : public Message {
+    static const int slotOffset = Message::messageSize;
+    static const int valueOffset = slotOffset + sizeof(slot_t); 
+  public:
+    static const int messageSize = valueOffset + sizeof(Value);
+
+    AcceptedMsg(char * data) : Message(data) {}
+    AcceptedMsg(char * data, 
+                node_t to, 
+                node_t from, 
+                ballot_t ballot, 
+                slot_t slot, 
+                Value value) 
+        : Message(data, Type::ACCEPTED, to, from, ballot) {
+      setSlot(slot);
+      setValue(value);
+    }
+
+    slot_t getSlot() { return *((slot_t *) (data + slotOffset)); }
+    void setSlot(slot_t slot) { *((slot_t *) (data + slotOffset)) = slot; }
+    Value getValue() { return *((Value *) (data + valueOffset)); }
+    void setValue(Value value) { *((Value *) (data + valueOffset)) = value; }
+  
+    void print() {
+      printf("ACPTED{to:%d from:%d bal:%d slot:%d val:%d}\n", getTo(), getFrom(), 
+          getBallot(), getSlot(), getValue());
+    }
+  };
+
   class HeartbeatMsg : public Message {
   public: 
     HeartbeatMsg(char * data) : Message(data) {}
@@ -285,8 +377,13 @@ public:
   
   void handlePromise(PromiseMsg &prom);
 
+  void handleAccept(AcceptMsg &accept);
+
+  void handleAccepted(AcceptedMsg &accepted);
+
   void handleHeartbeat(HeartbeatMsg &heartbeat);
 
+  void requestValue(Value value);
 };
 
 #endif // PAXOS_HH

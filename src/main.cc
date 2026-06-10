@@ -32,6 +32,11 @@ int main() {
   pax2.addServer("node1", "127.0.0.1:8989");
   pax2.finalizeServers();
 
+  std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+  std::cout << "Sending REqusts - - - - - - - - - - - - - - -\n";
+  pax1.requestValue(11);
+  pax2.requestValue(22);  
+
   //net1.addNode("node2", "127.0.0.1:9898");
   //net2.addNode("node1", "127.0.0.1:8989");
   //std::this_thread::sleep_for(std::chrono::milliseconds(500));

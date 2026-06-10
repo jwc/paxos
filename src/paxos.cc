@@ -31,13 +31,14 @@ void Paxos::finalizeServers() {
   }
 
   myBallot = id + numServers;
+  printf("myBallot:%d\n", myBallot);
 
   printf("new PaxosTask\n:");
   new PaxosTask(this);
 }
 
 void Paxos::processMessage(int length, char *message) {
-  std::cout << "processMessage()\n";
+  //std::cout << "processMessage()\n";
   if (numServers <= 0) {
     std::cerr << "Message received before servers setup.\n";
     // Paxos servers not yet established: do nothing.
@@ -70,9 +71,19 @@ void Paxos::processMessage(int length, char *message) {
         break;
       }
     case ACCEPT:
+      {
+        AcceptMsg acpt = AcceptMsg(message);
+        acpt.print();
+        handleAccept(acpt);
+        break;
+      }
     case ACCEPTED:
-      m.print();
-      break;
+      {
+        AcceptedMsg accepted = AcceptedMsg(message);
+        accepted.print();
+        handleAccepted(accepted);
+        break;
+      }
     case HEARTBEAT:
       {
         HeartbeatMsg heartbeat = HeartbeatMsg(message);
@@ -81,8 +92,8 @@ void Paxos::processMessage(int length, char *message) {
         break;
       }
     case REQUEST:
-      m.print();
-      break;
+      //m.print();
+      //break;
     default:
       std::cerr << "ERROR: Invalid Message Type Recieved!\n";
       m.print();
@@ -92,7 +103,7 @@ void Paxos::processMessage(int length, char *message) {
 void Paxos::handlePrepare(Paxos::PrepareMsg &prep) {
   std::cout<<"handlePrep(): "<<latestBallot<<" vs "<<prep.getBallot()<<"\n";
   if (prep.getBallot() > latestBallot) {
-    std::cout << "TRUE\n";
+    //std::cout << "TRUE\n";
 
     intervalsWithoutLeader = 0;
     latestBallot = prep.getBallot();
@@ -100,7 +111,7 @@ void Paxos::handlePrepare(Paxos::PrepareMsg &prep) {
     for (int i = 0; i < Paxos::PromiseMsg::messageSize; i++) bytes[i] = 0;
     PromiseMsg prom = Paxos::PromiseMsg(bytes, 0, id, latestBallot, log.getPendingStart(), log.getPendingEnd());
 
-    std::cout << "HI1\n";
+    //std::cout << "HI1\n";
     for (slot_t i = log.getPendingStart(); i < log.getPendingEnd(); i++) {
       if (log.isFilled(i)) {
         prom.setValue(i, log.getValue(i));
@@ -109,11 +120,11 @@ void Paxos::handlePrepare(Paxos::PrepareMsg &prep) {
     }
     
     printf("# servers: %d\n", numServers);
-    std::cout << "numServers:" << numServers << "\n";
+    //std::cout << "numServers:" << numServers << "\n";
     for (node_t i = 0; i < numServers; i++) {
       if (i == id) continue;
       prom.setTo(i);
-      std::cout << id << "->" << i << std::endl;
+      //std::cout << id << "->" << i << std::endl;
       net.sendMessage(servers[i], Paxos::PromiseMsg::messageSize, bytes);
     }
   }
@@ -129,7 +140,51 @@ void Paxos::handlePromise(Paxos::PromiseMsg &prom) {
   slot_t slot;
   for (slot = prom.getPromisedStart(); slot < prom.getPromisedEnd(); slot++) {
     log.insert(slot, prom.getValue(slot), prom.getVote(slot), prom.getBallot());
+    log.castVote(slot, id);
   }
+}
+
+void Paxos::handleAccept(Paxos::AcceptMsg &acpt) {
+  if (acpt.getBallot() < latestBallot) return;
+
+  if (acpt.getBallot() > latestBallot) {
+    latestBallot = acpt.getBallot();
+  }
+
+  intervalsWithoutLeader = 0;
+
+  if ( ! log.insert(acpt.getSlot(), acpt.getValue(), acpt.getBallot())) {
+    return;
+  }
+
+  log.castVote(acpt.getSlot(), id);
+  log.castVote(acpt.getSlot(), acpt.getFrom());
+
+  char rawMessage[Paxos::AcceptedMsg::messageSize] = {0};
+  AcceptedMsg accepted = AcceptedMsg(rawMessage, 
+                                     acpt.getFrom(), 
+                                     id, 
+                                     latestBallot, 
+                                     acpt.getSlot(), 
+                                     acpt.getValue());
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    accepted.setTo(i);
+    net.sendMessage(servers[i], Paxos::AcceptedMsg::messageSize, rawMessage);
+  }
+}
+
+void Paxos::handleAccepted(Paxos::AcceptedMsg &accepted) {
+  if (accepted.getBallot() < latestBallot) return;
+
+  if (accepted.getBallot() > latestBallot) {
+    latestBallot = accepted.getBallot();
+    intervalsWithoutLeader = 0;
+  }
+
+  log.insert(accepted.getSlot(), accepted.getValue(), accepted.getBallot());
+  log.castVote(accepted.getSlot(), id);
+  log.castVote(accepted.getSlot(), accepted.getFrom());
 }
 
 void Paxos::handleHeartbeat(Paxos::HeartbeatMsg &heartbeat) {
@@ -141,3 +196,25 @@ void Paxos::handleHeartbeat(Paxos::HeartbeatMsg &heartbeat) {
     intervalsWithoutLeader = 0;
   } 
 }
+
+void Paxos::requestValue(Value value) {
+  if ( ! isLeader()) return;
+
+  slot_t slot = log.getEmptySlot();
+  if ( ! log.insert(slot, value, latestBallot)) {
+    return;
+  }
+
+  log.castVote(slot, id);
+
+  assert(latestBallot % numServers == id);
+  char rawMessage[Paxos::AcceptMsg::messageSize] = {0};
+  Paxos::AcceptMsg accept = Paxos::AcceptMsg(rawMessage,
+                                             0, id, latestBallot, slot, value);
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    accept.setTo(i);
+    net.sendMessage(servers[i], Paxos::AcceptMsg::messageSize, rawMessage);
+  }
+}
+
