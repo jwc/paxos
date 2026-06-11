@@ -71,7 +71,7 @@ void Log::castVote(slot_t slot, node_t voter) {
 
 Paxos::Paxos(std::string name, std::string address) : net(name, address) {
   servers.push_back(name);
-  net.registerApp(this);
+  net.registerConsensus(this);
 }
 
 void Paxos::addServer(std::string name, std::string address) {

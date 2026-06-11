@@ -1,6 +1,53 @@
 #include "header.hh"
 
-Networking::Networking(std::string name, std::string address) {}
+// Public:
+
+IPv4::IPv4(std::string name, std::string address) {
+  std::cout << "IPv4 Constructor\n";
+  std::lock_guard<std::mutex> lock(mtx);
+
+  nodeName = name;
+  nameToId[name] = 0;
+  idToAddr[0] = stringToSockaddr(address); 
+
+  int sock = setupSocket(0);
+  if (sock < 0) {
+    std::cerr << "ERROR: setupSocket\n";
+  }
+
+  if (bind(sock, (struct sockaddr *)&idToAddr[0], sizeof(struct sockaddr_in))) {
+    std::cerr << "ERROR: bind\n";
+  }
+
+  if (listen(sock, 3)) {
+    std::cerr << "ERROR: listen\n";
+  }
+
+  idToSock[0] = sock;
+  openSockets.insert(sock);
+
+  std::cout << "Create ListenerTask\n";
+  new ListenerTask(this, sock);
+
+  new EndNetTask(this);
+}
+
+void IPv4::addNode(std::string name, std::string address) {
+  std::lock_guard<std::mutex> lock(mtx);
+
+  int id = -1;
+  if (nameToId.contains(name)) {
+    id = nameToId[name];
+  } else {
+    id = nameToId[name] = nameToId.size();
+  }
+
+  if ( ! idToAddr.contains(id)) {
+    idToAddr[id] = stringToSockaddr(address);
+  }
+}
+
+// Private:
 
 struct sockaddr_in IPv4::stringToSockaddr(std::string input) {
   struct sockaddr_in output;
@@ -94,60 +141,10 @@ void IPv4::sendMessage(std::string name, int length, char *message) {
   int id = nameToId[name];
 
   if (id == 0) {
-    app->processMessage(length, message);
+    consensus->processMessage(length, message);
     return;
   }
 
   sendMessage(id, length, message);
 }
-
-// Public:
-
-IPv4::IPv4(std::string name, std::string address) : Networking(name, address) {
-  std::cout << "IPv4 Constructor\n";
-  std::lock_guard<std::mutex> lock(mtx);
-
-  nodeName = name;
-  nameToId[name] = 0;
-  idToAddr[0] = stringToSockaddr(address); 
-
-  int sock = setupSocket(0);
-  if (sock < 0) {
-    std::cerr << "ERROR: setupSocket\n";
-  }
-
-  if (bind(sock, (struct sockaddr *)&idToAddr[0], sizeof(struct sockaddr_in))) {
-    std::cerr << "ERROR: bind\n";
-  }
-
-  if (listen(sock, 3)) {
-    std::cerr << "ERROR: listen\n";
-  }
-
-  idToSock[0] = sock;
-  openSockets.insert(sock);
-
-  std::cout << "Create ListenerTask\n";
-  new ListenerTask(this, sock);
-
-  new EndNetTask(this);
-}
-
-void IPv4::addNode(std::string name, std::string address) {
-  std::lock_guard<std::mutex> lock(mtx);
-
-  int id = -1;
-  if (nameToId.contains(name)) {
-    id = nameToId[name];
-  } else {
-    id = nameToId[name] = nameToId.size();
-  }
-
-  if ( ! idToAddr.contains(id)) {
-    idToAddr[id] = stringToSockaddr(address);
-  }
-}
-
-
-// Private:
 

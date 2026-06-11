@@ -1,17 +1,6 @@
 #ifndef IPV4_HH
 #define IPV4_HH
 
-class Networking {
-public:
-  Networking (std::string name, std::string address);
-private: 
-};
-
-class Application {
-public:
-  virtual void processMessage(int, char*) = 0;
-};
-
 /**
  * A network object for connecting with other nodes via IPv4. 
  */
@@ -25,7 +14,7 @@ public:
 
   void sendMessage(std::string name, int length, char *message);
 
-  void registerApp(Application *app) { this->app = app; }
+  void registerConsensus(Consensus *consensus) { this->consensus = consensus; }
 
 protected:
 
@@ -41,7 +30,7 @@ private:
   std::unordered_map<int, struct sockaddr_in> idToAddr;
   std::unordered_map<int, int> idToSock;
   std::set<int> openSockets;
-  Application *app = nullptr;
+  Consensus *consensus = nullptr;
   
   friend class ReceiverTask;
   friend class ListenerTask;
@@ -101,7 +90,8 @@ public:
         // Do something w/ the message
         std::cout << "RECV:'" << message << "'\n";
 
-        if (net->app != nullptr) net->app->processMessage(msgSize, message);
+        if (net->consensus != nullptr) 
+          net->consensus->processMessage(msgSize, message);
 
         delete[] message;
       }

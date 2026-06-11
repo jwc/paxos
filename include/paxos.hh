@@ -1,7 +1,6 @@
 #ifndef PAXOS_HH
 #define PAXOS_HH
 
-typedef int Value;
 typedef uint8_t node_t;
 typedef uint32_t ballot_t;
 typedef uint32_t slot_t;
@@ -61,7 +60,7 @@ public:
   void castVote(slot_t slot, node_t voter);
 };
 
-class Paxos : Application {
+class Paxos : Consensus {
 public:
   Paxos(std::string name, std::string address); 
 
