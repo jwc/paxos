@@ -37,12 +37,12 @@ bool Log::insert(slot_t slot, Value value, Vote vote, ballot_t ballot) {
     votes[slot] = vote;
     ballots[slot] = ballot;
   }
-  printf("INSERT(): slot:%d value:%d vote:%d\n", slot, value, votes[slot].votes);
+  printf("INSERT(): slot:%d val:%d vote:%d\n", slot, value, votes[slot].votes);
 
   if (pendingEnd < slot) pendingEnd = slot;
     
   while (isConfirmed(pendingStart)) {
-    printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
+    printf("CONFIRMED: slot:%d val:%d\n", pendingStart, values[pendingStart]);
     pendingStart++;
   }
 
@@ -62,15 +62,10 @@ void Log::castVote(slot_t slot, node_t voter) {
   if (isFilled(slot) && isWritable(slot)) votes[slot].cast(voter); 
 
   while (isConfirmed(pendingStart)) {
-    printf("CONFIRMED: slot:%d value:%d\n", pendingStart, values[pendingStart]);
+    printf("CONFIRMED: slot:%d val:%d\n", pendingStart, values[pendingStart]);
     pendingStart++;
   }
 }
-
-
-
-
-
 
 // Paxos Public:
 
@@ -200,15 +195,13 @@ void Paxos::processMessage(int length, char *message) {
 void Paxos::handlePrepare(Paxos::PrepareMsg &prep) {
   std::cout<<"handlePrep(): "<<latestBallot<<" vs "<<prep.getBallot()<<"\n";
   if (prep.getBallot() > latestBallot) {
-    //std::cout << "TRUE\n";
-
     intervalsWithoutLeader = 0;
     latestBallot = prep.getBallot();
     char bytes[Paxos::PromiseMsg::messageSize];
     for (int i = 0; i < Paxos::PromiseMsg::messageSize; i++) bytes[i] = 0;
-    PromiseMsg prom = Paxos::PromiseMsg(bytes, 0, id, latestBallot, log.getPendingStart(), log.getPendingEnd());
+    PromiseMsg prom = Paxos::PromiseMsg(bytes, 0, id, latestBallot, 
+                                  log.getPendingStart(), log.getPendingEnd());
 
-    //std::cout << "HI1\n";
     for (slot_t i = log.getPendingStart(); i < log.getPendingEnd(); i++) {
       if (log.isFilled(i)) {
         prom.setValue(i, log.getValue(i));
@@ -217,11 +210,9 @@ void Paxos::handlePrepare(Paxos::PrepareMsg &prep) {
     }
     
     printf("# servers: %d\n", numServers);
-    //std::cout << "numServers:" << numServers << "\n";
     for (node_t i = 0; i < numServers; i++) {
       if (i == id) continue;
       prom.setTo(i);
-      //std::cout << id << "->" << i << std::endl;
       net.sendMessage(servers[i], Paxos::PromiseMsg::messageSize, bytes);
     }
   }
@@ -236,7 +227,8 @@ void Paxos::handlePromise(Paxos::PromiseMsg &prom) {
 
   slot_t slot;
   for (slot = prom.getPromisedStart(); slot < prom.getPromisedEnd(); slot++) {
-    log.insert(slot, prom.getValue(slot), prom.getVote(slot), prom.getBallot());
+    log.insert(slot, prom.getValue(slot), 
+               prom.getVote(slot), prom.getBallot());
     log.castVote(slot, id);
   }
 }
@@ -294,6 +286,242 @@ void Paxos::handleHeartbeat(Paxos::HeartbeatMsg &heartbeat) {
   } 
 }
 
-bool Paxos::isLeader() 
-{ return latestBallot == myBallot && leaderVote.hasMajorityOf(numServers); }
+bool Paxos::isLeader() { 
+  return latestBallot == myBallot && leaderVote.hasMajorityOf(numServers); 
+}
+
+// PaxosTask:
+
+Paxos::PaxosTask::PaxosTask(Paxos *pax) 
+    : Task(Type::NON_BLOCKING, WAIT_TIME_MS), pax(pax) { 
+  ready(); 
+}
+
+void Paxos::PaxosTask::executeTask() {
+  printf("%d Timer int:%d\n", pax->id, pax->intervalsWithoutLeader);
+
+  if (pax == nullptr) return;
+
+  if (pax->numServers <= 0) { 
+    // Paxos servers not yet established: do nothing.
+    new PaxosTask(pax);
+    return;
+  }
+
+  if (pax->isLeader()) {
+    // send heartbeat message
+    char msgRaw[Paxos::HeartbeatMsg::messageSize] = {0};
+    HeartbeatMsg msg = HeartbeatMsg(msgRaw, pax->id, 
+                                    pax->id, pax->latestBallot);
+    for (node_t i = 0; i < pax->numServers; i++) {
+      if (i == pax->id) continue;
+      msg.setTo(i);
+      pax->net.sendMessage(pax->servers[i], HeartbeatMsg::messageSize, msgRaw);
+    }
+
+  } else {
+    // determine if leader is live
+    if (pax->intervalsWithoutLeader++ > MAX_INTERVALS_WO_LEADER) {
+      while (pax->myBallot < pax->latestBallot) 
+        pax->myBallot += pax->numServers;
+      pax->leaderVote.clear();
+      pax->leaderVote.cast(pax->id);
+      pax->latestBallot = pax->myBallot;
+
+      char msgRaw[Paxos::PrepareMsg::messageSize] = {0};
+      Paxos::PrepareMsg msg = Paxos::PrepareMsg(msgRaw, pax->id, pax->id, 
+                                                pax->latestBallot);
+      for (node_t i = 0; i < pax->numServers; i++) {
+        if (i == pax->id) continue;
+        msg.setTo(i);
+        pax->net.sendMessage(pax->servers[i], PrepareMsg::messageSize, msgRaw);
+      }
+    }
+  }
+
+  new PaxosTask(pax);
+}
+
+//Paxos Message Methods:
+
+Paxos::Message::Message(char * data) : data(data) {}
+
+Paxos::Message::Message(char * data, 
+                        Paxos::Type type, 
+                        node_t to, 
+                        node_t from, 
+                        ballot_t ballot) 
+    : data(data) {
+  setType(type);
+  setTo(to);
+  setFrom(from);
+  setBallot(ballot);
+}
+
+Paxos::Type Paxos::Message::getType() { 
+  return *((Paxos::Type *) (data + typeOffset)); 
+}
+
+void Paxos::Message::setType(Paxos::Type type) { 
+  *((Paxos::Type *) (data + typeOffset)) = type; 
+}
+
+node_t Paxos::Message::getTo() { return *((node_t *) (data + toOffset)); }
+
+void Paxos::Message::setTo(node_t to) { *((node_t *) (data + toOffset)) = to; }
+
+node_t Paxos::Message::getFrom() { return *((node_t *) (data + fromOffset)); }
+
+void Paxos::Message::setFrom(node_t from) { 
+  *((node_t *) (data + fromOffset)) = from; 
+} 
+
+ballot_t Paxos::Message::getBallot() { 
+  return *((ballot_t *) (data + ballotOffset)); 
+}
+
+void Paxos::Message::setBallot(ballot_t ballot) { 
+  *((ballot_t *) (data + ballotOffset)) = ballot; 
+}
+
+
+void Paxos::Message::print() { 
+  printf("MSG{type:%hhd to:%d  from:%d  bal:%d}\n", 
+      getType(), getTo(), getFrom(), getBallot());
+}
+
+Paxos::PrepareMsg::PrepareMsg(char * data) : Message(data) {}
+
+Paxos::PrepareMsg::PrepareMsg(char * data, 
+                              node_t to, 
+                              node_t from, 
+                              ballot_t ballot)
+    : Message(data, Paxos::Type::PREPARE, to, from, ballot) {}
+
+void Paxos::PrepareMsg::print() { 
+  printf("PREP{to:%d  from:%d  bal:%d}\n", getTo(), getFrom(), getBallot());
+}
+
+
+Paxos::PromiseMsg::PromiseMsg(char * data) : Message(data) {
+  if (getPromisedEnd() - getPromisedStart() > maxPendingValues) {
+    setPromisedEnd(getPromisedStart() + maxPendingValues);
+  }
+}
+
+Paxos::PromiseMsg::PromiseMsg(char * data, 
+                              node_t to, 
+                              node_t from, 
+                              ballot_t ballot, 
+                              slot_t promisedStart, 
+                              slot_t promisedEnd) 
+    : Message(data, Paxos::Type::PROMISE, to, from, ballot) {
+  setPromisedStart(promisedStart);
+  setPromisedEnd(promisedEnd);
+
+  if (getPromisedEnd() - getPromisedStart() > maxPendingValues) {
+    setPromisedEnd(getPromisedStart() + maxPendingValues);
+  }
+}
+
+
+slot_t Paxos::PromiseMsg::getPromisedStart() { 
+  return *((slot_t *) (data + promisedStartOffset)); 
+}
+
+void Paxos::PromiseMsg::setPromisedStart(slot_t slot) { 
+  *((slot_t *) (data + promisedStartOffset)) = slot; 
+}
+
+slot_t Paxos::PromiseMsg::getPromisedEnd() { 
+  return *((slot_t *) (data + promisedEndOffset)); 
+}
+
+void Paxos::PromiseMsg::setPromisedEnd(slot_t slot) { 
+  *((slot_t *) (data + promisedEndOffset)) = slot; 
+}
+
+Value Paxos::PromiseMsg::getValue(slot_t slot) { 
+  return ((Value *) (data + valuesOffset))[slot - getPromisedStart()]; 
+}
+
+void Paxos::PromiseMsg::setValue(slot_t slot, Value val) { 
+  ((Value *) (data + valuesOffset))[slot - getPromisedStart()] = val; 
+}
+
+Vote Paxos::PromiseMsg::getVote(slot_t slot) { 
+  return ((Vote *) (data + votesOffset))[slot - getPromisedStart()]; 
+}
+
+void Paxos::PromiseMsg::setVote(slot_t slot, Vote vote) { 
+  ((Vote *) (data + votesOffset))[slot - getPromisedStart()] = vote; 
+}
+
+void Paxos::PromiseMsg::print() {
+  printf("PROM{to:%d  from:%d  bal:%d", getTo(), getFrom(), getBallot());
+  for (slot_t i = getPromisedStart(); i < getPromisedEnd(); i++)
+    printf("\t%ud:%ud:%ud\n", i, getValue(i), getVote(i).count());
+}
+
+
+Paxos::AcceptMsg::AcceptMsg(char * data) : Message(data) {}
+
+Paxos::AcceptMsg::AcceptMsg(char * data, 
+                            node_t to, 
+                            node_t from, 
+                            ballot_t ballot, 
+                            slot_t slot, 
+                            Value value) 
+    : Message(data, Type::ACCEPT, to, from, ballot) {
+  setSlot(slot);
+  setValue(value);
+}
+
+slot_t Paxos::AcceptMsg::getSlot() { return *((slot_t *) (data+slotOffset)); }
+
+void Paxos::AcceptMsg::setSlot(slot_t slot) { 
+  *((slot_t *) (data + slotOffset)) = slot; 
+}
+
+Value Paxos::AcceptMsg::getValue() { return *((Value *) (data+valueOffset)); }
+
+void Paxos::AcceptMsg::setValue(Value value) { 
+  *((Value *) (data + valueOffset)) = value; 
+}
+  
+void Paxos::AcceptMsg::print() {
+  printf("ACPT{to:%d from:%d bal:%d slot:%d val:%d}\n", getTo(), getFrom(),
+    getBallot(), getSlot(), getValue());
+}
+
+Paxos::AcceptedMsg::AcceptedMsg(char * data) : AcceptMsg(data) {}
+
+Paxos::AcceptedMsg::AcceptedMsg(char * data, 
+            node_t to, 
+            node_t from, 
+            ballot_t ballot, 
+            slot_t slot, 
+            Value value) 
+    : AcceptMsg(data, to, from, ballot, slot, value) {
+  setType(Type::ACCEPTED);
+}
+
+void Paxos::AcceptedMsg::print() {
+  printf("ACPTED{to:%d from:%d bal:%d slot:%d val:%d}\n", getTo(), 
+      getFrom(), getBallot(), getSlot(), getValue());
+}
+
+
+
+Paxos::HeartbeatMsg::HeartbeatMsg(char * data) : Message(data) {}
+
+Paxos::HeartbeatMsg::HeartbeatMsg(char * data, 
+                                  node_t to, 
+                                  node_t from, 
+                                  ballot_t ballot) 
+    : Message(data, Type::HEARTBEAT, to, from, ballot) {}
+
+void Paxos::HeartbeatMsg::print() {
+  printf("HEART{to:%d from:%d bal:%d}\n", getTo(), getFrom(), getBallot());
+}
 

@@ -94,6 +94,16 @@ private:
     REQUEST
   };
 
+  class PaxosTask : public Task {
+    const static int WAIT_TIME_MS = 1000;
+    Paxos *pax;
+
+    void executeTask() override;
+
+  public:
+    explicit PaxosTask(Paxos *pax);
+  };
+
   class Message {
   protected:
     char * data; 
@@ -105,43 +115,30 @@ private:
   public:
     static const int messageSize = ballotOffset + sizeof(ballot_t);
 
-    Message(char * data) : data(data) {}
-    Message(char * data, Type type, node_t to, node_t from, ballot_t ballot) 
-        : data(data) {
-      setType(type);
-      setTo(to);
-      setFrom(from);
-      setBallot(ballot);
-    }
+    Message(char * data); 
+    Message(char * data, Type type, node_t to, node_t from, ballot_t ballot);
 
-    Type getType() { return *((Type *) (data + typeOffset)); }
-    void setType(Type type) { *((Type *) (data + typeOffset)) = type; }
+    Type getType(); 
+    void setType(Type type);
 
-    node_t getTo() { return *((node_t *) (data + toOffset)); }
-    void setTo(node_t to) { *((node_t *) (data + toOffset)) = to; }
+    node_t getTo();
+    void   setTo(node_t to);
 
-    node_t getFrom() 
-    { return *((node_t *) (data + fromOffset)); }
-    void setFrom(node_t from) { *((node_t *) (data + fromOffset)) = from; } 
+    node_t getFrom();
+    void   setFrom(node_t from);
 
-    ballot_t getBallot() { return *((ballot_t *) (data + ballotOffset)); }
-    void setBallot(ballot_t ballot) 
-    { *((ballot_t *) (data + ballotOffset)) = ballot; }
-    
-    void print() { 
-      printf("MSG{type:%hhd to:%d  from:%d  bal:%d}\n", getType(), getTo(), getFrom(), getBallot());
-    }
+    ballot_t getBallot();
+    void     setBallot(ballot_t ballot);
+
+    void print();
   };
 
   class PrepareMsg : public Message {
   public:
-    PrepareMsg(char * data) : Message(data) {}
-    PrepareMsg(char * data, node_t to, node_t from, ballot_t ballot) 
-      : Message(data, Type::PREPARE, to, from, ballot) {}
+    PrepareMsg(char * data); 
+    PrepareMsg(char * data, node_t to, node_t from, ballot_t ballot);
 
-    void print() { 
-      printf("PREP{to:%d  from:%d  bal:%d}\n", getTo(), getFrom(), getBallot());
-    }
+    void print();
   };
 
   class PromiseMsg : public Message {
@@ -152,53 +149,24 @@ private:
     static const int votesOffset = valuesOffset + (maxPendingValues * sizeof(Value));
   public:
     static const int messageSize = votesOffset + (maxPendingValues * sizeof(Vote));
-
-    PromiseMsg(char * data) : Message(data) {
-      std::cout << "Prom. Msg. Const. Begin\n";
-      if (getPromisedEnd() - getPromisedStart() > maxPendingValues) {
-        std::cerr << "ERROR: Bad Range in Prom. Msg. (" << getPromisedStart() 
-          << " & " << getPromisedEnd() << ")\n";
-        setPromisedEnd(getPromisedStart() + maxPendingValues);
-      }
-      std::cout << "Prom. Msg. Const. End\n";
-    }
-    PromiseMsg(char * data, node_t to, node_t from, ballot_t ballot, slot_t promisedStart, slot_t promisedEnd) : Message(data, Type::PROMISE, to, from, ballot) {
-      std::cout << "Prom. Msg. Const. Begin\n";
-      setPromisedStart(promisedStart);
-      setPromisedEnd(promisedEnd);
-      if (getPromisedEnd() - getPromisedStart() > maxPendingValues) {
-        std::cerr << "ERROR: Bad Range in Prom. Msg. (" << getPromisedStart() 
-          << " & " << getPromisedEnd() << ")\n";
-        setPromisedEnd(getPromisedStart() + maxPendingValues);
-      }
-      std::cout << "Prom. Msg. Const. End\n";
-    }
+     
+    PromiseMsg(char * data);
+    PromiseMsg(char * data, node_t to, node_t from, ballot_t ballot, 
+        slot_t promisedStart, slot_t promisedEnd);
     
-    slot_t getPromisedStart() 
-    { return *((slot_t *) (data + promisedStartOffset)); }
-    void setPromisedStart(slot_t slot) 
-    { *((slot_t *) (data + promisedStartOffset)) = slot; }
+    slot_t getPromisedStart();
+    void   setPromisedStart(slot_t slot);
 
-    slot_t getPromisedEnd() 
-    { return *((slot_t *) (data + promisedEndOffset)); }
-    void setPromisedEnd(slot_t slot) 
-    { *((slot_t *) (data + promisedEndOffset)) = slot; }
+    slot_t getPromisedEnd();
+    void   setPromisedEnd(slot_t slot);
 
-    Value getValue(slot_t slot) 
-    { return ((Value *) (data + valuesOffset))[slot - getPromisedStart()]; }
-    void setValue(slot_t slot, Value val) 
-    { ((Value *) (data + valuesOffset))[slot - getPromisedStart()] = val; }
+    Value getValue(slot_t slot);
+    void  setValue(slot_t slot, Value val);
 
-    Vote getVote(slot_t slot) 
-    { return ((Vote *) (data + votesOffset))[slot - getPromisedStart()]; }
-    void setVote(slot_t slot, Vote vote) 
-    { ((Vote *) (data + votesOffset))[slot - getPromisedStart()] = vote; }
+    Vote getVote(slot_t slot);
+    void setVote(slot_t slot, Vote vote);
 
-    void print() {
-      printf("PROM{to:%d  from:%d  bal:%d", getTo(), getFrom(), getBallot());
-      for (slot_t i = getPromisedStart(); i < getPromisedEnd(); i++)
-        printf("\t%ud:%ud:%ud\n", i, getValue(i), getVote(i).count());
-    }
+    void print();
   };
 
   class AcceptMsg : public Message {
@@ -207,118 +175,34 @@ private:
   public:
     static const int messageSize = valueOffset + sizeof(Value);
 
-    AcceptMsg(char * data) : Message(data) {}
-    AcceptMsg(char * data, 
-              node_t to, 
-              node_t from, 
-              ballot_t ballot, 
-              slot_t slot, 
-              Value value) 
-        : Message(data, Type::ACCEPT, to, from, ballot) {
-      setSlot(slot);
-      setValue(value);
-    }
+    AcceptMsg(char * data);
+    AcceptMsg(char * data, node_t to, node_t from, ballot_t ballot, 
+              slot_t slot, Value value);
 
-    slot_t getSlot() { return *((slot_t *) (data + slotOffset)); }
-    void setSlot(slot_t slot) { *((slot_t *) (data + slotOffset)) = slot; }
-    Value getValue() { return *((Value *) (data + valueOffset)); }
-    void setValue(Value value) { *((Value *) (data + valueOffset)) = value; }
+    slot_t getSlot();
+    void setSlot(slot_t slot);
+
+    Value getValue();
+    void setValue(Value value);
   
-    void print() {
-      printf("ACPT{to:%d from:%d bal:%d slot:%d val:%d}\n", getTo(), getFrom(), 
-          getBallot(), getSlot(), getValue());
-    }
+    void print();
   };
 
-  class AcceptedMsg : public Message {
-    static const int slotOffset = Message::messageSize;
-    static const int valueOffset = slotOffset + sizeof(slot_t); 
+  class AcceptedMsg : public AcceptMsg {
   public:
-    static const int messageSize = valueOffset + sizeof(Value);
+    AcceptedMsg(char * data);
+    AcceptedMsg(char * data, node_t to, node_t from, 
+                ballot_t ballot, slot_t slot, Value value);
 
-    AcceptedMsg(char * data) : Message(data) {}
-    AcceptedMsg(char * data, 
-                node_t to, 
-                node_t from, 
-                ballot_t ballot, 
-                slot_t slot, 
-                Value value) 
-        : Message(data, Type::ACCEPTED, to, from, ballot) {
-      setSlot(slot);
-      setValue(value);
-    }
-
-    slot_t getSlot() { return *((slot_t *) (data + slotOffset)); }
-    void setSlot(slot_t slot) { *((slot_t *) (data + slotOffset)) = slot; }
-    Value getValue() { return *((Value *) (data + valueOffset)); }
-    void setValue(Value value) { *((Value *) (data + valueOffset)) = value; }
-  
-    void print() {
-      printf("ACPTED{to:%d from:%d bal:%d slot:%d val:%d}\n", getTo(), getFrom(), 
-          getBallot(), getSlot(), getValue());
-    }
+    void print();
   };
 
   class HeartbeatMsg : public Message {
   public: 
-    HeartbeatMsg(char * data) : Message(data) {}
-    HeartbeatMsg(char * data, node_t to, node_t from, ballot_t ballot)
-      : Message(data, Type::HEARTBEAT, to, from, ballot) {}
+    HeartbeatMsg(char * data);
+    HeartbeatMsg(char * data, node_t to, node_t from, ballot_t ballot);
 
-    void print() {
-      printf("HEART{to:%d from:%d bal:%d}\n", getTo(), getFrom(), getBallot());
-    }
-  };
- 
-  class PaxosTask : public Task {
-    const static int WAIT_TIME_MS = 1000;
-    Paxos *pax;
-
-  public:
-    PaxosTask(Paxos *pax) : Task(Type::NON_BLOCKING, WAIT_TIME_MS), pax(pax) 
-    { printf("REeady\n"); ready(); }
-
-    void executeTask() {
-      printf("%d Timer int:%d\n", pax->id, pax->intervalsWithoutLeader);
-
-      if (pax == nullptr) return;
-
-      if (pax->numServers <= 0) { 
-        // Paxos servers not yet established: do nothing.
-        new PaxosTask(pax);
-        return;
-      }
-
-      if (pax->isLeader()) {
-        // send heartbeat message
-        char msgRaw[Paxos::HeartbeatMsg::messageSize] = {0};
-        HeartbeatMsg msg = HeartbeatMsg(msgRaw, pax->id, pax->id, pax->latestBallot);
-        for (node_t i = 0; i < pax->numServers; i++) {
-          if (i == pax->id) continue;
-          msg.setTo(i);
-          pax->net.sendMessage(pax->servers[i], HeartbeatMsg::messageSize, msgRaw);
-        }
-
-      } else {
-        // determine if leader is live
-        if (pax->intervalsWithoutLeader++ > MAX_INTERVALS_WO_LEADER) {
-          while (pax->myBallot < pax->latestBallot) pax->myBallot += pax->numServers;
-          pax->leaderVote.clear();
-          pax->leaderVote.cast(pax->id);
-          pax->latestBallot = pax->myBallot;
-
-          char msgRaw[Paxos::PrepareMsg::messageSize] = {0};
-          Paxos::PrepareMsg msg = Paxos::PrepareMsg(msgRaw, pax->id, pax->id, pax->latestBallot);
-          for (node_t i = 0; i < pax->numServers; i++) {
-            if (i == pax->id) continue;
-            msg.setTo(i);
-            pax->net.sendMessage(pax->servers[i], PrepareMsg::messageSize, msgRaw);
-          }
-        }
-      }
-
-      new PaxosTask(pax);
-    }
+    void print();
   };
 
   void processMessage(int length, char *message);
@@ -334,6 +218,7 @@ private:
   void handleHeartbeat(HeartbeatMsg &heartbeat);
 
   bool isLeader();
+
 };
 
 #endif // PAXOS_HH
