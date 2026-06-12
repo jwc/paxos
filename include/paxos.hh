@@ -60,7 +60,7 @@ public:
   void castVote(slot_t slot, node_t voter);
 };
 
-class Paxos : Consensus {
+class Paxos : public Consensus {
 public:
   Paxos(std::string name, std::string address); 
 
@@ -69,6 +69,8 @@ public:
   void finalizeServers();
 
   void requestValue(Value value);
+
+  void registerApplication(Application *app) { this->app = app; }
 
 private:
   IPv4                      net;
@@ -83,6 +85,9 @@ private:
   int                       intervalsWithoutLeader = 0;
   const static int          MAX_INTERVALS_WO_LEADER = 3;
   const static int          maxPendingValues = Log::MAX_PENDING;
+
+  Application               *app = nullptr;
+  slot_t                    processedUpTo = 0;
 
   enum Type : uint8_t { 
     PREPARE = 1, 

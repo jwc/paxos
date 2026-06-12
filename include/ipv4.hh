@@ -54,7 +54,7 @@ public:
   void executeTask() override {
     int id = -1;
 
-    std::cout << "ReceiverTask Created.\n";
+    //std::cout << "ReceiverTask Created.\n";
 
     while (true) {
       uint32_t msgSize = 0;
@@ -88,7 +88,7 @@ public:
 
       } else {
         // Do something w/ the message
-        std::cout << "RECV:'" << message << "'\n";
+        //std::cout << "RECV:'" << message << "'\n";
 
         if (net->consensus != nullptr) 
           net->consensus->processMessage(msgSize, message);
@@ -110,7 +110,7 @@ public:
       }
     }
 
-    std::cout << "FIN RECEIVERTASK\n";
+    //std::cout << "FIN RECEIVERTASK\n";
   }
 };
 
@@ -120,7 +120,7 @@ public:
   ListenerTask(IPv4 *net, int socket) : IPv4Task(net, socket) { ready(); }
   void executeTask() override {
 
-    std::cout << "ListenerTask Created:" << socket << "\n";
+    //std::cout << "ListenerTask Created:" << socket << "\n";
 
     while (true) {
       struct sockaddr_in  respAddress;
@@ -131,7 +131,7 @@ public:
       if (respSocket < 0) {
         printf("Accept\n");
         fprintf(stderr, "ERRNO:%d\n", errno);
-        std::cout << "FIN LISTENERTASK:" << socket << "\n";
+        //std::cout << "FIN LISTENERTASK:" << socket << "\n";
         return;
       }
 
@@ -140,7 +140,7 @@ public:
       send(respSocket, &netOrderNameLen, sizeof(netOrderNameLen), 0);
       send(respSocket, net->nodeName.c_str(), nameLen, 0);
 
-      fprintf(stderr, "socket %d added.\n", respSocket);
+      //fprintf(stderr, "socket %d added.\n", respSocket);
       net->openSockets.insert(respSocket);
       new ReceiverTask(net, respSocket);
     }
@@ -152,7 +152,7 @@ public:
   EndNetTask(IPv4 *net) : IPv4Task(net, 0) { registerCleanupTask(); }
   void executeTask() override {
     std::lock_guard<std::mutex> lock(net->mtx);
-    std::cout << "END NET:" << net->openSockets.size() << "\n";
+    //std::cout << "END NET:" << net->openSockets.size() << "\n";
 
     for (int sock : net->openSockets) {
       shutdown(sock, SHUT_RD);
@@ -160,7 +160,7 @@ public:
     net->openSockets.clear();
     net->idToSock.clear();
 
-    std::cout << "FIN ENDNETTASK\n";
+    //std::cout << "FIN ENDNETTASK\n";
   }
 };
 

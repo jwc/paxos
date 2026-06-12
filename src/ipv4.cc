@@ -3,7 +3,7 @@
 // Public:
 
 IPv4::IPv4(std::string name, std::string address) {
-  std::cout << "IPv4 Constructor\n";
+  //std::cout << "IPv4 Constructor\n";
   std::lock_guard<std::mutex> lock(mtx);
 
   nodeName = name;
@@ -26,7 +26,7 @@ IPv4::IPv4(std::string name, std::string address) {
   idToSock[0] = sock;
   openSockets.insert(sock);
 
-  std::cout << "Create ListenerTask\n";
+  //std::cout << "Create ListenerTask\n";
   new ListenerTask(this, sock);
 
   new EndNetTask(this);

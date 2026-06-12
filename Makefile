@@ -1,5 +1,5 @@
 CXX       = g++
-CXXFLAGS  = -g -std=c++20 -pthread -lncursesw -I$(INC_DIR)
+CXXFLAGS  = -Wall -Werror -g -std=c++20 -pthread -lncursesw -I$(INC_DIR)
 MAKEFLAGS += -j4
 
 .PRECIOUS: %.o %.gch %.out
@@ -10,7 +10,7 @@ INC_DIR := ./include
 OBJ_DIR := ./src
 TST_DIR := ./test
 
-TARGETS := main.out nonstop.out interactive.out
+TARGETS := main.out map.out
 TARGETS := $(TARGETS:%=$(BLD_DIR)/%)
 SOURCES := $(shell find $(SRC_DIR) -name '*.cc')
 OBJECTS := $(SOURCES:$(SRC_DIR)/%.cc=$(OBJ_DIR)/%.o)

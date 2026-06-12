@@ -1,7 +1,7 @@
 #ifndef INTERFACES_HH
 #define INTERFACES_HH
 
-typedef int Value;
+typedef int32_t Value;
 
 class Application {
   public:
@@ -18,7 +18,7 @@ public:
 
   virtual void requestValue(Value value) = 0;
 
-  //virtual void registerApplication(Application *app) = 0;
+  virtual void registerApplication(Application *app) = 0;
 };
 
 class Networking {
