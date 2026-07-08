@@ -29,7 +29,7 @@ private:
   slot_t freeSlot = 0;
 
 public:
-  const static int MAX_PENDING = 4;
+  const static int MAX_PENDING = 2;
 
   Log(node_t &maxVotes) : maxVotes(maxVotes) {}
 
@@ -95,6 +95,8 @@ private:
     ACCEPT,
     ACCEPTED,
     HEARTBEAT,
+    QUERY,
+    CONFIRMED,
     REQUEST
   };
 
@@ -116,23 +118,36 @@ private:
     static const int fromOffset   = toOffset    + sizeof(node_t);
     static const int ballotOffset = fromOffset  + sizeof(node_t);
 
+    template <typename T> inline void set(int location, T word) {
+      *((T *) (data + location)) = word;
+    }
+
+    template <typename T> inline T get(int location) { 
+      return *((T *) (data + location));
+    } 
+
   public:
     static const int messageSize = ballotOffset + sizeof(ballot_t);
 
     Message(char * data); 
+
     Message(char * data, Type type, node_t to, node_t from, ballot_t ballot);
 
-    Type getType(); 
-    void setType(Type type);
+    Type getType() { return get<Paxos::Type>(typeOffset); }
 
-    node_t getTo();
-    void   setTo(node_t to);
+    void setType(Type type) { set(typeOffset, type); }
 
-    node_t getFrom();
-    void   setFrom(node_t from);
+    node_t getTo() { return get<node_t>(toOffset); }
 
-    ballot_t getBallot();
-    void     setBallot(ballot_t ballot);
+    void setTo(node_t to) { set(toOffset, to); }
+
+    node_t getFrom() { return get<node_t>(fromOffset); }
+
+    void setFrom(node_t from) { set(fromOffset, from); }
+
+    ballot_t getBallot() { return get<ballot_t>(ballotOffset); }
+
+    void setBallot(ballot_t ballot) { set(ballotOffset, ballot); }
 
     void print();
   };
@@ -202,9 +217,49 @@ private:
   };
 
   class HeartbeatMsg : public Message {
+    static const int uptoOffset = Message::messageSize;
   public: 
+    static const int messageSize = uptoOffset + sizeof(slot_t);
+
     HeartbeatMsg(char * data);
     HeartbeatMsg(char * data, node_t to, node_t from, ballot_t ballot);
+
+    slot_t getUpto() { return get<slot_t>(uptoOffset); }
+
+    void setUpto(slot_t slot) { set(uptoOffset, slot); }
+
+    void print();
+  };
+
+  class QueryMsg : public Message {
+    static const int startSlotOffset = Message::messageSize;
+    static const int endSlotOffset = startSlotOffset + sizeof(slot_t);
+  public:
+    static const int messageSize = endSlotOffset + sizeof(slot_t);
+
+    QueryMsg (char * data);
+    QueryMsg (char * data, node_t to, node_t from, ballot_t ballot, slot_t start, slot_t end);
+
+    slot_t getStartSlot();
+    void setStartSlot(slot_t slot);
+
+    slot_t getEndSlot();
+    void   setEndSlot(slot_t slot);
+
+    void print();
+  };
+
+  class ConfirmedMsg : public AcceptMsg {
+    static const int voteOffset = AcceptMsg::messageSize;
+  public:
+    static const int messageSize = voteOffset + sizeof(Vote);
+
+    ConfirmedMsg(char * data);
+    ConfirmedMsg(char * data, node_t to, node_t from, 
+                ballot_t ballot, slot_t slot, Value value, Vote vote);
+
+    Vote getVote();
+    void setVote(Vote vote);
 
     void print();
   };
@@ -221,8 +276,23 @@ private:
 
   void handleHeartbeat(HeartbeatMsg &heartbeat);
 
+  void handleQuery(QueryMsg &query);
+
+  void handleConfirmed(ConfirmedMsg &confirmed);
+
   bool isLeader();
 
+  void sendAccept(slot_t slot) {
+    char raw[Paxos::AcceptMsg::messageSize] = {0};
+    AcceptMsg accept = AcceptMsg(raw, 0, id, latestBallot, 
+                                 slot, log.getValue(slot));
+
+    for (node_t i = 0; i < numServers; i++) {
+      if (i == id) continue;
+      accept.setTo(i);
+      net.sendMessage(servers[i], Paxos::AcceptMsg::messageSize, raw);
+    }
+  }
 };
 
 #endif // PAXOS_HH

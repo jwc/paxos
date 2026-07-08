@@ -52,9 +52,10 @@
 
 
 #include "task.hh"
-
-//#include "networking.hh"
+#include "interfaces.hh"
 #include "ipv4.hh"
+
+#include "paxos.hh"
 
 
 /*

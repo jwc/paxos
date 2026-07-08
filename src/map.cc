@@ -36,7 +36,7 @@ public:
   }
 
   void print() {
-    int arraySize = 128;
+    int arraySize = 8;
     int rowSize = 8;
     for (int i = 0; i < arraySize; i += rowSize) {
       for (int j = i; j < i + rowSize; j++) {
@@ -45,6 +45,18 @@ public:
       printf("\n");
     }
   }
+};
+
+class MapTask : public Task {
+  Map & map;
+  MapTask(Map & map) : Task(Type::NON_BLOCKING, 2500), map(map) { ready(); }
+  void executeTask() override {
+    map.set(rand() % 8, rand() % 32);
+
+    new MapTask(map);
+  }
+public: 
+  static void run(Map & map) { new MapTask(map); }
 };
 
 int main(int argc, char **argv) {
@@ -61,6 +73,8 @@ int main(int argc, char **argv) {
     pax.addServer(argv[i], argv[i]);
   }
   pax.finalizeServers();
+
+  MapTask::run(map);
 
   std::string line;
   int num, key, val;
