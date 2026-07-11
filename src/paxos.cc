@@ -117,16 +117,7 @@ void Paxos::requestValue(Value value) {
   log.castVote(slot, id);
 
   assert(latestBallot % numServers == id);
-  /*
-  char rawMessage[Paxos::AcceptMsg::messageSize] = {0};
-  Paxos::AcceptMsg accept = Paxos::AcceptMsg(rawMessage,
-                                             0, id, latestBallot, slot, value);
-  for (node_t i = 0; i < numServers; i++) {
-    if (i == id) continue;
-    accept.setTo(i);
-    net.sendMessage(servers[i], Paxos::AcceptMsg::messageSize, rawMessage);
-  }
-  */
+
   sendAccept(slot);
 }
 
@@ -214,24 +205,8 @@ void Paxos::handlePrepare(Paxos::PrepareMsg &prep) {
   if (prep.getBallot() > latestBallot) {
     intervalsWithoutLeader = 0;
     latestBallot = prep.getBallot();
-    char bytes[Paxos::PromiseMsg::messageSize];
-    for (int i = 0; i < Paxos::PromiseMsg::messageSize; i++) bytes[i] = 0;
-    PromiseMsg prom = Paxos::PromiseMsg(bytes, 0, id, latestBallot, 
-                                  log.getPendingStart(), log.getPendingEnd());
 
-    for (slot_t i = log.getPendingStart(); i < log.getPendingEnd(); i++) {
-      if (log.isFilled(i)) {
-        prom.setValue(i, log.getValue(i));
-        prom.setVote(i, log.getVote(i));
-      }
-    }
-    
-    //printf("# servers: %d\n", numServers);
-    for (node_t i = 0; i < numServers; i++) {
-      if (i == id) continue;
-      prom.setTo(i);
-      net.sendMessage(servers[i], Paxos::PromiseMsg::messageSize, bytes);
-    }
+    sendPromise();
   }
 }
 
@@ -260,28 +235,13 @@ void Paxos::handleAccept(Paxos::AcceptMsg &acpt) {
   intervalsWithoutLeader = 0;
 
   if ( ! log.insert(acpt.getSlot(), acpt.getValue(), acpt.getBallot())) {
-    //char bytes[Paxos::QueryMsg::messageSize] = {0};
-    //QueryMsg q = QueryMsg(bytes, acpt.getFrom(), id, 
-                          //latestBallot, log.getPendingStart(), acpt.getSlot());
-    //net.sendMessage(servers[q.getTo()], Paxos::QueryMsg::messageSize, bytes);
     return;
   }
 
   log.castVote(acpt.getSlot(), id);
   log.castVote(acpt.getSlot(), acpt.getFrom());
 
-  char rawMessage[Paxos::AcceptedMsg::messageSize] = {0};
-  AcceptedMsg accepted = AcceptedMsg(rawMessage, 
-                                     acpt.getFrom(), 
-                                     id, 
-                                     latestBallot, 
-                                     acpt.getSlot(), 
-                                     acpt.getValue());
-  for (node_t i = 0; i < numServers; i++) {
-    if (i == id) continue;
-    accepted.setTo(i);
-    net.sendMessage(servers[i], Paxos::AcceptedMsg::messageSize, rawMessage);
-  }
+  sendAccepted(acpt.getSlot());
 }
 
 void Paxos::handleAccepted(Paxos::AcceptedMsg &accepted) {
@@ -336,6 +296,75 @@ void Paxos::handleConfirmed(Paxos::ConfirmedMsg &confirmed) {
   }
 }
 
+void Paxos::sendPrepare() {
+  char raw[Paxos::PrepareMsg::messageSize] = {0};
+  Paxos::PrepareMsg msg = Paxos::PrepareMsg(raw, id, id, latestBallot);
+
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    msg.setTo(i);
+    net.sendMessage(servers[i], PrepareMsg::messageSize, raw);
+  }
+}
+
+void Paxos::sendPromise() {
+  char raw[Paxos::PromiseMsg::messageSize] = {0};
+  PromiseMsg prom = Paxos::PromiseMsg(raw, 0, id, latestBallot, 
+                              log.getPendingStart(), log.getPendingEnd());
+
+  for (slot_t i = log.getPendingStart(); i < log.getPendingEnd(); i++) {
+    if (log.isFilled(i)) {
+      prom.setValue(i, log.getValue(i));
+      prom.setVote(i, log.getVote(i));
+    }
+  }
+
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    prom.setTo(i);
+    net.sendMessage(servers[i], Paxos::PromiseMsg::messageSize, raw);
+  }
+}
+
+void Paxos::sendAccept(slot_t slot) {
+  char raw[Paxos::AcceptMsg::messageSize] = {0};
+  AcceptMsg accept = AcceptMsg(raw, 0, id, latestBallot, 
+                               slot, log.getValue(slot));
+
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    accept.setTo(i);
+    net.sendMessage(servers[i], Paxos::AcceptMsg::messageSize, raw);
+  }
+}
+
+void Paxos::sendAccepted(slot_t slot) {
+  char raw[Paxos::AcceptedMsg::messageSize] = {0};
+  AcceptedMsg accepted = AcceptedMsg(raw,
+                                     0, 
+                                     id,
+                                     latestBallot, 
+                                     slot,
+                                     log.getValue(slot));
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    accepted.setTo(i);
+    net.sendMessage(servers[i], Paxos::AcceptedMsg::messageSize, raw);
+  }
+}
+
+void Paxos::sendHeartbeat() {
+  char raw[Paxos::HeartbeatMsg::messageSize] = {0};
+  HeartbeatMsg heartbeat = HeartbeatMsg(raw, id, id, latestBallot);
+  heartbeat.setUpto(log.getPendingStart());
+
+  for (node_t i = 0; i < numServers; i++) {
+    if (i == id) continue;
+    heartbeat.setTo(i);
+    net.sendMessage(servers[i], HeartbeatMsg::messageSize, raw);
+  }
+}
+
 bool Paxos::isLeader() { 
   return latestBallot == myBallot && leaderVote.hasMajorityOf(numServers); 
 }
@@ -361,15 +390,7 @@ void Paxos::PaxosTask::executeTask() {
 
   if (pax->isLeader()) {
     // send heartbeat message
-    char msgRaw[Paxos::HeartbeatMsg::messageSize] = {0};
-    HeartbeatMsg msg = HeartbeatMsg(msgRaw, pax->id, 
-                                    pax->id, pax->latestBallot);
-    msg.setUpto(pax->log.getPendingStart());
-    for (node_t i = 0; i < pax->numServers; i++) {
-      if (i == pax->id) continue;
-      msg.setTo(i);
-      pax->net.sendMessage(pax->servers[i], HeartbeatMsg::messageSize, msgRaw);
-    }
+    pax->sendHeartbeat();
 
     if (log.isPending(log.getPendingStart())) {
       // Resend oldest pending
@@ -385,14 +406,7 @@ void Paxos::PaxosTask::executeTask() {
       pax->leaderVote.cast(pax->id);
       pax->latestBallot = pax->myBallot;
 
-      char msgRaw[Paxos::PrepareMsg::messageSize] = {0};
-      Paxos::PrepareMsg msg = Paxos::PrepareMsg(msgRaw, pax->id, pax->id, 
-                                                pax->latestBallot);
-      for (node_t i = 0; i < pax->numServers; i++) {
-        if (i == pax->id) continue;
-        msg.setTo(i);
-        pax->net.sendMessage(pax->servers[i], PrepareMsg::messageSize, msgRaw);
-      }
+      pax->sendPrepare();
     }
   }
 

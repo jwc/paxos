@@ -282,17 +282,15 @@ private:
 
   bool isLeader();
 
-  void sendAccept(slot_t slot) {
-    char raw[Paxos::AcceptMsg::messageSize] = {0};
-    AcceptMsg accept = AcceptMsg(raw, 0, id, latestBallot, 
-                                 slot, log.getValue(slot));
+  void sendPrepare();
 
-    for (node_t i = 0; i < numServers; i++) {
-      if (i == id) continue;
-      accept.setTo(i);
-      net.sendMessage(servers[i], Paxos::AcceptMsg::messageSize, raw);
-    }
-  }
+  void sendPromise(); 
+
+  void sendAccept(slot_t slot);
+
+  void sendAccepted(slot_t slot);
+
+  void sendHeartbeat();
 };
 
 #endif // PAXOS_HH
