@@ -264,6 +264,21 @@ private:
     void print();
   };
 
+  class RequestMsg : public Message {
+    static const int valueOffset = Message::messageSize;
+  public:
+    static const int messageSize = valueOffset + sizeof(Value);
+
+    RequestMsg(char * data);
+    RequestMsg(char * data, node_t to, node_t from, 
+              ballot_t ballot, Value value);
+
+    Value getValue();
+    void setValue(Value value);
+
+    void print();
+  };
+
   void processMessage(int length, char *message);
 
   void handlePrepare(PrepareMsg &prep);
@@ -279,6 +294,8 @@ private:
   void handleQuery(QueryMsg &query);
 
   void handleConfirmed(ConfirmedMsg &confirmed);
+
+  void handleRequest(RequestMsg &request);
 
   bool isLeader();
 

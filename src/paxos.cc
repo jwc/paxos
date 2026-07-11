@@ -107,18 +107,15 @@ void Paxos::finalizeServers() {
 }
 
 void Paxos::requestValue(Value value) {
-  if ( ! isLeader()) return;
+  node_t leader = latestBallot % numServers;
+  char raw[Paxos::RequestMsg::messageSize] = {0};
+  RequestMsg req = RequestMsg(raw, leader, id, latestBallot, value);
+  req.setTo(leader);
 
-  slot_t slot = log.getEmptySlot();
-  if ( ! log.insert(slot, value, latestBallot)) {
-    return;
-  }
-
-  log.castVote(slot, id);
-
-  assert(latestBallot % numServers == id);
-
-  sendAccept(slot);
+  if (isLeader())
+    handleRequest(req); 
+  else
+    net.sendMessage(servers[leader], Paxos::RequestMsg::messageSize, raw);
 }
 
 // Paxos Private:
@@ -192,8 +189,12 @@ void Paxos::processMessage(int length, char *message) {
         break;
       }
     case REQUEST:
-      //m.print();
-      //break;
+      {
+        RequestMsg request = RequestMsg(message);
+        request.print();
+        handleRequest(request);
+        break;
+      }
     default:
       std::cerr << "ERROR: Invalid Message Type Recieved!\n";
       m.print();
@@ -294,6 +295,21 @@ void Paxos::handleConfirmed(Paxos::ConfirmedMsg &confirmed) {
       log.castVote(confirmed.getSlot(), i);
     }
   }
+}
+
+void Paxos::handleRequest(Paxos::RequestMsg &request) {
+  if ( ! isLeader()) return;
+
+  slot_t slot = log.getEmptySlot();
+  if ( ! log.insert(slot, request.getValue(), latestBallot)) {
+    return;
+  }
+
+  log.castVote(slot, id);
+
+  assert(latestBallot % numServers == id);
+
+  sendAccept(slot);
 }
 
 void Paxos::sendPrepare() {
@@ -663,5 +679,27 @@ void Paxos::ConfirmedMsg::print() {
   printf("CONFIRM{to:%d from:%d bal:%d slot:%d val:%d vote:%d}\n", 
          getTo(), getFrom(), getBallot(), 
          getSlot(), getValue(), getVote().count());
+}
+
+Paxos::RequestMsg::RequestMsg(char * data) : Message(data) {}
+
+Paxos::RequestMsg::RequestMsg(char * data, 
+                              node_t to, 
+                              node_t from, 
+                              ballot_t ballot, 
+                              Value value)
+    : Message(data, Paxos::Type::REQUEST, to, from, ballot) {
+  setValue(value);
+}
+
+Value Paxos::RequestMsg::getValue() { 
+  return get<Value>(Paxos::RequestMsg::valueOffset); 
+}
+
+void Paxos::RequestMsg::setValue(Value value) { set(valueOffset, value); }
+
+void Paxos::RequestMsg::print() {
+  printf("REQUST{to:%d from:%d bal:%d val:%d}\n", 
+         getTo(), getFrom(), getBallot(), getValue());
 }
 
