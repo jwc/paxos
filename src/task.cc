@@ -163,7 +163,7 @@ void Task::TaskManager::end() {
 
 // TimerTask:
 
-TimerTask::TimerTask() : Task(Type::BLOCKING, 0) { ready(); }
+TimerTask::TimerTask() : Task(Type::NON_BLOCKING, 0) { ready(); }
 
 void TimerTask::create() { new TimerTask(); }
 
