@@ -1,14 +1,12 @@
-# Paxos Hearts
+# Paxos
 
-### WIP: The game logic and ui are still a work in progress, but the networking and paxos code is working. 
+A simplified implementation of the Paxos consensus algorithm. Paxos is a algorithm designed for distributed systems by Leslie Lamport for ensuring consistancy across a group of nodes despite unreliable network conditions. To reduce complexity, this implementation collapses all the roles into one.
 
-A serverless implementation of the card game Hearts using Paxos Consensus.
+## Potential Future Improvements
 
-The game is multiplayer and designed to be run on 4 PCs on the same LAN. 
+1. Add ability to batch multiple values into each Accept, Accepted, and Confirm message to reduce required network traffic.
 
-## Rules
+2. Add ability to write confirmed values to a file for quicker fault recovery.
 
-https://52cardgamerules.com/52-card-games-rule/hearts-rules/
-
-https://officialgamerules.org/game-rules/hearts/
+3. Experiment with modifications to protocol to allow progress without a majority (like described here: https://padhye.org/raft-minority/)
 
