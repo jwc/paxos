@@ -10,7 +10,7 @@ INC_DIR := ./include
 OBJ_DIR := ./src
 TST_DIR := ./test
 
-TARGETS := main.out map.out
+TARGETS := main.out map.out number.out
 TARGETS := $(TARGETS:%=$(BLD_DIR)/%)
 SOURCES := $(shell find $(SRC_DIR) -name '*.cc')
 OBJECTS := $(SOURCES:$(SRC_DIR)/%.cc=$(OBJ_DIR)/%.o)
